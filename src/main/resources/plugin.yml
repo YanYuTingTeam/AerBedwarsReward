@@ -1,0 +1,14 @@
+name: AerBedwarsReward
+version: 1.0
+main: com.aermini.aerbedwarsreward.AerBedwarsReward
+author: AerMini
+depend: [BedwarsRel, AerLevels, BedwarsScoreBoardAddon]
+api-version: 1.8
+load: POSTWORLD
+
+commands:
+  aerbedwarsreward:
+    permission: aerbedwarsreward.use
+permissions:
+  aerbedwarsreward.use:
+    default: true

@@ -1,0 +1,50 @@
+scores:
+  kill: 2
+  die: 0
+  win: 0
+  bed-destroy: 5
+  lose: 0
+  record: 0
+eval:
+  raw:
+    - '&7----------------------------------------------------------'
+    - '   &b你好{player}   &r&b请为游戏地图《{map}》进行点评。'
+    - '       {_like}       {_medium}       {_dislike}'
+    - '&7----------------------------------------------------------'
+  buttons:
+    like:
+      display: '&6&l&n喜欢'
+      cmd:
+        - '[MESSAGE] &f投票成功'
+    medium:
+      display: '&6&l&n一般'
+      cmd:
+        - '[MESSAGE] &f投票成功'
+    dislike:
+      display: '&6&l&n不喜欢'
+      cmd:
+        - '[MESSAGE] &f投票成功'
+  voted: '&f你已经投过票了'
+rewards:
+  1:
+    top: [1]
+    cmd:
+      - '[CONSOLE] axp {player} addxp 450'
+  2:
+    top: [2, 3]
+    cmd:
+      - '[CONSOLE] axp {player} addxp 350'
+  3:
+    top: [4, 5]
+    cmd:
+      - '[CONSOLE] axp {player} addxp 200'
+  4:
+    top: [6, 7, 8]
+    cmd:
+      - '[CONSOLE] axp {player} addxp 100'
+  5:
+    top: [9, 10, 11, 12, 13, 14, 15, 16]
+    cmd:
+      - '[CONSOLE] axp {player} addxp 50'
+debug: false
+delay_ticks: 20
