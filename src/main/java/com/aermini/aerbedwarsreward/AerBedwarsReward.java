@@ -1,7 +1,7 @@
 package com.aermini.aerbedwarsreward;
 
 import com.aermini.aerbedwarsreward.commands.VoteCommand;
-import com.aermini.aerbedwarsreward.listeners.BedwarsGameEndListener;
+import com.aermini.aerbedwarsreward.listeners.BedwarsGameListener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.logging.Logger;
@@ -15,7 +15,7 @@ public class AerBedwarsReward extends JavaPlugin {
         instance = this;
         logger = getLogger();
         saveDefaultConfig();
-        getServer().getPluginManager().registerEvents(new BedwarsGameEndListener(), this);
+        getServer().getPluginManager().registerEvents(new BedwarsGameListener(), this);
         getCommand("aerbedwarsreward").setExecutor(new VoteCommand(this));
         if (getConfig().getBoolean("debug", false)) logger.info("命令 aerbedwarsreward 已注册");
 

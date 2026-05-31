@@ -1,7 +1,7 @@
 package com.aermini.aerbedwarsreward.commands;
 
 import com.aermini.aerbedwarsreward.AerBedwarsReward;
-import com.aermini.aerbedwarsreward.listeners.BedwarsGameEndListener;
+import com.aermini.aerbedwarsreward.listeners.BedwarsGameListener;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -46,7 +46,7 @@ public class VoteCommand implements CommandExecutor {
                         player.getName(), gameName, buttonName)
                 );
             }
-            BedwarsGameEndListener.handleVote(player, gameName, buttonName);
+            BedwarsGameListener.handleVote(player, gameName, buttonName);
             if (plugin.getConfig().getBoolean("debug", false)) {
                 plugin.getPluginLogger().info("[VoteCommand] 投票处理完成");
             }

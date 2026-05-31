@@ -5,11 +5,17 @@ import io.github.bedwarsrel.events.BedwarsGameOverEvent;
 import io.github.bedwarsrel.events.BedwarsGameStartedEvent;
 import io.github.bedwarsrel.game.Game;
 import io.github.bedwarsrel.game.Team;
-import io.github.bedwarsrel.statistics.PlayerStatistic;
-import io.github.bedwarsrel.statistics.PlayerStatisticManager;
+import me.ram.bedwarsscoreboardaddon.Main;
+import me.ram.bedwarsscoreboardaddon.arena.Arena;
+import me.ram.bedwarsscoreboardaddon.storage.PlayerGameStorage;
 import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.chat.*;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.chat.ComponentSerializer;
+import net.minecraft.server.v1_8_R3.IChatBaseComponent;
+import net.minecraft.server.v1_8_R3.PacketPlayOutChat;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.entity.Player;
@@ -19,13 +25,11 @@ import org.bukkit.event.Listener;
 
 import java.util.*;
 
-import net.minecraft.server.v1_8_R3.IChatBaseComponent;
-import net.minecraft.server.v1_8_R3.PacketPlayOutChat;
-
-public class BedwarsGameEndListener implements Listener {
+public class BedwarsGameListener implements Listener {
     private static final Map<String, Set<UUID>> votedPlayers = new HashMap<>();
     private static final Map<String, Map<UUID, String>> gamePlayers = new HashMap<>();
     private static final Set<String> processedGames = new HashSet<>();
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameStarted(BedwarsGameStartedEvent event) {
         Game game = event.getGame();
@@ -84,26 +88,21 @@ public class BedwarsGameEndListener implements Listener {
             return scores;
         }
 
-        try {
-            Object arena = getArenaFromGame(game);
-            if (arena != null) {
-                if (plugin.getConfig().getBoolean("debug", false)) {
-                    plugin.getPluginLogger().info("成功从 BedwarsScoreboardAddon 获取 Arena");
-                }
-                
-                Map<Player, Integer> scoresFromAddon = getScoresFromBWSBA(arena, playerDataMap, scoreKill, scoreBedDestroy);
-                if (!scoresFromAddon.isEmpty()) {
-                    return scoresFromAddon;
-                }
-            }
-        } catch (Exception e) {
-            if (plugin.getConfig().getBoolean("debug", false)) {
-                plugin.getPluginLogger().warning("从 BedwarsScoreboardAddon 获取数据失败: " + e.getMessage());
-            }
-        }
 
-        if (plugin.getConfig().getBoolean("debug", false)) {
-            plugin.getPluginLogger().info("使用降级方案获取统计数据");
+        Arena arena = Main.getInstance().getArenaManager().getArena(game.getName());
+        if (arena != null) {
+            if (plugin.getConfig().getBoolean("debug", false)) {
+                plugin.getPluginLogger().info("成功从 BedwarsScoreboardAddon 获取 Arena");
+            }
+
+            Map<Player, Integer> scoresFromAddon = getScoresFromBWSBA(arena, playerDataMap, scoreKill, scoreBedDestroy);
+            if (!scoresFromAddon.isEmpty()) {
+                return scoresFromAddon;
+            }
+        } else {
+            if (plugin.getConfig().getBoolean("debug", false)) {
+                plugin.getPluginLogger().warning("从 BedwarsScoreboardAddon 中找不到 " + gameName + " 所属Arena");
+            }
         }
 
         for (Map.Entry<UUID, String> entry : playerDataMap.entrySet()) {
@@ -116,87 +115,45 @@ public class BedwarsGameEndListener implements Listener {
         return scores;
     }
 
-    private Object getArenaFromGame(Game game) {
-        try {
-            Class<?> mainClass = Class.forName("me.ram.bedwarsscoreboardaddon.Main");
-            Object mainInstance = mainClass.getMethod("getInstance").invoke(null);
-            Object arenaManager = mainClass.getMethod("getArenaManager").invoke(mainInstance);
-            Object arena = arenaManager.getClass()
-                .getMethod("getArena", String.class)
-                .invoke(arenaManager, game.getName());
-            return arena;
-        } catch (ClassNotFoundException e) {
-            AerBedwarsReward.getInstance().getPluginLogger().warning("未找到 BedwarsScoreboardAddon 插件");
-        } catch (Exception e) {
-            AerBedwarsReward.getInstance().getPluginLogger().warning("获取 BedwarsScoreboardAddon Arena 失败: " + e.getMessage());
-        }
-        return null;
-    }
-
-    private Map<Player, Integer> getScoresFromBWSBA(Object arena, Map<UUID, String> playerDataMap,
-                                                     int scoreKill, int scoreBedDestroy) {
+    private Map<Player, Integer> getScoresFromBWSBA(Arena arena, Map<UUID, String> playerDataMap,
+                                                    int scoreKill, int scoreBedDestroy) {
         Map<Player, Integer> scores = new HashMap<>();
         AerBedwarsReward plugin = AerBedwarsReward.getInstance();
-        try {
-            Object playerGameStorage = arena.getClass().getMethod("getPlayerGameStorage").invoke(arena);
-            if (playerGameStorage == null) {
-                plugin.getPluginLogger().warning("playerGameStorage 为 null");
-                return scores;
-            }
-            java.lang.reflect.Method getTotalKillsMethod = playerGameStorage.getClass().getMethod("getTotalKills", String.class);
-            java.lang.reflect.Method getBedsMethod = playerGameStorage.getClass().getMethod("getBeds", String.class);
-            for (Map.Entry<UUID, String> entry : playerDataMap.entrySet()) {
-                UUID playerId = entry.getKey();
-                String playerName = entry.getValue();
-                Player player = Bukkit.getPlayer(playerId);
-                int kills = 0;
-                int beds = 0;
-                try {
-                    Object killsResult = getTotalKillsMethod.invoke(playerGameStorage, playerName);
-                    if (killsResult instanceof Integer) {
-                        kills = (Integer) killsResult;
-                    }
-                } catch (Exception e) {
-                    if (plugin.getConfig().getBoolean("debug", false)) {
-                        plugin.getPluginLogger().warning("获取玩家 " + playerName + " 的击杀数失败: " + e.getMessage());
-                    }
-                }
-                try {
-                    Object bedsResult = getBedsMethod.invoke(playerGameStorage, playerName);
-                    if (bedsResult instanceof Integer) {
-                        beds = (Integer) bedsResult;
-                    }
-                } catch (Exception e) {
-                    if (plugin.getConfig().getBoolean("debug", false)) {
-                        plugin.getPluginLogger().warning("获取玩家 " + playerName + " 的破床数失败: " + e.getMessage());
-                    }
-                }
-                int score = kills * scoreKill + beds * scoreBedDestroy;
-                if (player != null && player.isOnline()) {
-                    scores.put(player, score);
-                    if (plugin.getConfig().getBoolean("debug", false)) {
-                        plugin.getPluginLogger().info(String.format(
+
+        PlayerGameStorage playerGameStorage = arena.getPlayerGameStorage();
+
+        if (playerGameStorage == null) {
+            plugin.getPluginLogger().warning("playerGameStorage 为 null");
+            return scores;
+        }
+
+        for (Map.Entry<UUID, String> entry : playerDataMap.entrySet()) {
+            UUID playerId = entry.getKey();
+            String playerName = entry.getValue();
+            Player player = Bukkit.getPlayer(playerId);
+
+            int kills = playerGameStorage.getTotalKills(playerName);
+            int beds = playerGameStorage.getBeds(playerName);
+            int score = (kills * scoreKill) + (beds * scoreBedDestroy);
+
+            if (player != null && player.isOnline()) {
+                scores.put(player, score);
+                if (plugin.getConfig().getBoolean("debug", false)) {
+                    plugin.getPluginLogger().info(String.format(
                             "玩家 %s (在线): 击杀=%d, 破坏床=%d, 分数=%d",
                             playerName, kills, beds, score
-                        ));
-                    }
-                } else {
-                    if (plugin.getConfig().getBoolean("debug", false)) {
-                        plugin.getPluginLogger().info(String.format(
+                    ));
+                }
+            } else {
+                if (plugin.getConfig().getBoolean("debug", false)) {
+                    plugin.getPluginLogger().info(String.format(
                             "玩家 %s (离线): 击杀=%d, 破坏床=%d, 分数=%d (因离线未加入奖励列表)",
                             playerName, kills, beds, score
-                        ));
-                    }
+                    ));
                 }
             }
-        } catch (NoSuchMethodException e) {
-            plugin.getPluginLogger().severe("BedwarsScoreboardAddon API 版本不匹配！找不到带参数的 getTotalKills(String) 或 getBeds(String) 方法。");
-            plugin.getPluginLogger().severe("错误详情: " + e.getMessage());
-            e.printStackTrace();
-        } catch (Exception e) {
-            plugin.getPluginLogger().warning("从 BedwarsScoreboardAddon 获取统计数据失败: " + e.getMessage());
-            e.printStackTrace();
         }
+
         return scores;
     }
 
@@ -439,46 +396,5 @@ public class BedwarsGameEndListener implements Listener {
             e.printStackTrace();
             player.sendMessage("投票失败");
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<UUID, PlayerStatistic> getCachedStatistics(PlayerStatisticManager statisticManager) {
-        try {
-            java.lang.reflect.Field[] fields = statisticManager.getClass().getDeclaredFields();
-            for (java.lang.reflect.Field field : fields) {
-                field.setAccessible(true);
-                Object value = field.get(statisticManager);
-                if (value instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) value;
-                    if (!map.isEmpty()) {
-                        Object firstKey = map.keySet().iterator().next();
-                        Object firstValue = map.values().iterator().next();
-                        if (firstKey instanceof UUID && firstValue instanceof PlayerStatistic) {
-                            return (Map<UUID, PlayerStatistic>) map;
-                        }
-                    }
-                }
-            }
-            Class<?> superClass = statisticManager.getClass().getSuperclass();
-            while (superClass != null) {
-                fields = superClass.getDeclaredFields();
-                for (java.lang.reflect.Field field : fields) {
-                    field.setAccessible(true);
-                    Object value = field.get(statisticManager);
-                    if (value instanceof Map) {
-                        Map<?, ?> map = (Map<?, ?>) value;
-                        if (!map.isEmpty()) {
-                            Object firstKey = map.keySet().iterator().next();
-                            Object firstValue = map.values().iterator().next();
-                            if (firstKey instanceof UUID && firstValue instanceof PlayerStatistic) {
-                                return (Map<UUID, PlayerStatistic>) map;
-                            }
-                        }
-                    }
-                }
-                superClass = superClass.getSuperclass();
-            }
-        } catch (Exception e) {}
-        return null;
     }
 }
