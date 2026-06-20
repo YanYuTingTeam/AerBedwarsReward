@@ -1,8 +1,9 @@
 package com.aermini.aerbedwarsreward.listeners;
 
 import com.aermini.aerbedwarsreward.AerBedwarsReward;
-import io.github.bedwarsrel.events.BedwarsGameOverEvent;
 import io.github.bedwarsrel.events.BedwarsGameStartedEvent;
+import io.github.bedwarsrel.events.BedwarsGameOverEvent;
+import io.github.bedwarsrel.events.BedwarsPlayerLeaveEvent;
 import io.github.bedwarsrel.game.Game;
 import io.github.bedwarsrel.game.Team;
 import me.ram.bedwarsscoreboardaddon.Main;
@@ -17,6 +18,7 @@ import net.md_5.bungee.chat.ComponentSerializer;
 import net.minecraft.server.v1_8_R3.IChatBaseComponent;
 import net.minecraft.server.v1_8_R3.PacketPlayOutChat;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -43,6 +45,26 @@ public class BedwarsGameListener implements Listener {
         AerBedwarsReward plugin = AerBedwarsReward.getInstance();
         if (plugin.getConfig().getBoolean("debug", false)) {
             plugin.getPluginLogger().info("游戏开始 " + gameName + "，记录 " + playersMap.size() + " 名玩家");
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerLeave(BedwarsPlayerLeaveEvent event) {
+        Game game = event.getGame();
+        String gameName = game.getName();
+        Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
+
+        Map<UUID, String> playerDataMap = gamePlayers.get(gameName);
+        if (playerDataMap != null) {
+            String removed = playerDataMap.remove(playerId);
+            if (removed != null) {
+                AerBedwarsReward plugin = AerBedwarsReward.getInstance();
+                if (plugin.getConfig().getBoolean("debug", false)) {
+                    plugin.getPluginLogger().info("玩家 " + player.getName()
+                            + " 离开游戏 " + gameName + "，已从待分发奖励列表移除");
+                }
+            }
         }
     }
 
@@ -88,7 +110,6 @@ public class BedwarsGameListener implements Listener {
             return scores;
         }
 
-
         Arena arena = Main.getInstance().getArenaManager().getArena(game.getName());
         if (arena != null) {
             if (plugin.getConfig().getBoolean("debug", false)) {
@@ -108,7 +129,6 @@ public class BedwarsGameListener implements Listener {
         for (Map.Entry<UUID, String> entry : playerDataMap.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player != null && player.isOnline()) {
-                plugin.getPluginLogger().info("玩家 " + player.getName() + " 无法获取统计数据，分数=0 (降级)");
                 scores.put(player, 0);
             }
         }
@@ -144,13 +164,6 @@ public class BedwarsGameListener implements Listener {
                             playerName, kills, beds, score
                     ));
                 }
-            } else {
-                if (plugin.getConfig().getBoolean("debug", false)) {
-                    plugin.getPluginLogger().info(String.format(
-                            "玩家 %s (离线): 击杀=%d, 破坏床=%d, 分数=%d (因离线未加入奖励列表)",
-                            playerName, kills, beds, score
-                    ));
-                }
             }
         }
 
@@ -179,22 +192,25 @@ public class BedwarsGameListener implements Listener {
         AerBedwarsReward plugin = AerBedwarsReward.getInstance();
         int rewardedCount = 0;
         if (plugin.getConfig().contains("rewards")) {
-            for (String rewardKey : plugin.getConfig().getConfigurationSection("rewards").getKeys(false)) {
-                List<Integer> topRanks = plugin.getConfig().getIntegerList("rewards." + rewardKey + ".top");
-                List<String> commands = plugin.getConfig().getStringList("rewards." + rewardKey + ".cmd");
-                if (topRanks.isEmpty() || commands.isEmpty()) continue;
-                for (int playerRank = 1; playerRank <= sortedPlayers.size(); playerRank++) {
-                    if (topRanks.contains(playerRank)) {
-                        Player player = sortedPlayers.get(playerRank - 1).getKey();
-                        int score = sortedPlayers.get(playerRank - 1).getValue();
-                        executeCommands(player, commands);
-                        if (plugin.getConfig().getBoolean("debug", false)) {
-                            plugin.getPluginLogger().info(
-                                    String.format("玩家 %s (第%d名, %d分) 获得奖励",
-                                            player.getName(), playerRank, score)
-                            );
+            ConfigurationSection rewardsSection = plugin.getConfig().getConfigurationSection("rewards");
+            if (rewardsSection != null) {
+                for (String rewardKey : rewardsSection.getKeys(false)) {
+                    List<Integer> topRanks = plugin.getConfig().getIntegerList("rewards." + rewardKey + ".top");
+                    List<String> commands = plugin.getConfig().getStringList("rewards." + rewardKey + ".cmd");
+                    if (topRanks.isEmpty() || commands.isEmpty()) continue;
+                    for (int playerRank = 1; playerRank <= sortedPlayers.size(); playerRank++) {
+                        if (topRanks.contains(playerRank)) {
+                            Player player = sortedPlayers.get(playerRank - 1).getKey();
+                            int score = sortedPlayers.get(playerRank - 1).getValue();
+                            executeCommands(player, commands);
+                            if (plugin.getConfig().getBoolean("debug", false)) {
+                                plugin.getPluginLogger().info(
+                                        String.format("玩家 %s (第%d名, %d分) 在游戏 %s 中获得奖励",
+                                                player.getName(), playerRank, score, game.getName())
+                                );
+                            }
+                            rewardedCount++;
                         }
-                        rewardedCount++;
                     }
                 }
             }
@@ -211,7 +227,7 @@ public class BedwarsGameListener implements Listener {
         if (!votedPlayers.containsKey(gameName)) votedPlayers.put(gameName, new HashSet<>());
         List<String> rawMessages = plugin.getConfig().getStringList("eval.raw");
         Map<String, Map<String, Object>> buttonsConfig = new HashMap<>();
-        org.bukkit.configuration.ConfigurationSection buttonsSection = plugin.getConfig().getConfigurationSection("eval.buttons");
+        ConfigurationSection buttonsSection = plugin.getConfig().getConfigurationSection("eval.buttons");
         if (buttonsSection != null) {
             for (String buttonKey : buttonsSection.getKeys(false)) {
                 buttonsConfig.put(buttonKey, buttonsSection.getConfigurationSection(buttonKey).getValues(false));
@@ -251,7 +267,6 @@ public class BedwarsGameListener implements Listener {
     private BaseComponent[] buildEvalMessage(List<String> rawMessages, Map<String, Map<String, Object>> buttonsConfig,
                                               Player player, Game game, String gameName) {
         List<BaseComponent> components = new ArrayList<>();
-        AerBedwarsReward plugin = AerBedwarsReward.getInstance();
         for (int i = 0; i < rawMessages.size(); i++) {
             String line = rawMessages.get(i);
             String playerName = player.getName();
@@ -271,7 +286,6 @@ public class BedwarsGameListener implements Listener {
                                          Player player, String gameName, List<BaseComponent> components) {
         StringBuilder currentText = new StringBuilder();
         int i = 0;
-        AerBedwarsReward plugin = AerBedwarsReward.getInstance();
         while (i < line.length()) {
             char c = line.charAt(i);
             if (i < line.length() - 1 && c == '{' && line.charAt(i + 1) == '_') {
@@ -305,7 +319,6 @@ public class BedwarsGameListener implements Listener {
     @SuppressWarnings("unchecked")
     private void addButton(String buttonName, Map<String, Map<String, Object>> buttonsConfig,
                            Player player, String gameName, List<BaseComponent> components) {
-        AerBedwarsReward plugin = AerBedwarsReward.getInstance();
         Map<String, Object> buttonConfig = buttonsConfig.get(buttonName);
         if (buttonConfig == null || !buttonConfig.containsKey("display") || !buttonConfig.containsKey("cmd")) {
             return;
@@ -367,13 +380,13 @@ public class BedwarsGameListener implements Listener {
                 return;
             }
 
-            org.bukkit.configuration.ConfigurationSection buttonsSection = plugin.getConfig().getConfigurationSection("eval.buttons");
+            ConfigurationSection buttonsSection = plugin.getConfig().getConfigurationSection("eval.buttons");
             if (buttonsSection == null) {
                 player.sendMessage(ChatColor.RED + "投票配置错误");
                 return;
             }
 
-            org.bukkit.configuration.ConfigurationSection buttonSection = buttonsSection.getConfigurationSection(buttonName);
+            ConfigurationSection buttonSection = buttonsSection.getConfigurationSection(buttonName);
             if (buttonSection == null) {
                 player.sendMessage(ChatColor.RED + "无效的投票选项: " + buttonName);
                 return;
