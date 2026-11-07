@@ -1,6 +1,7 @@
 package com.aermini.aerbedwarsreward.listeners;
 
 import com.aermini.aerbedwarsreward.AerBedwarsReward;
+import io.github.bedwarsrel.BedwarsRel;
 import io.github.bedwarsrel.events.BedwarsGameStartedEvent;
 import io.github.bedwarsrel.events.BedwarsGameOverEvent;
 import io.github.bedwarsrel.events.BedwarsPlayerLeaveEvent;
@@ -238,6 +239,8 @@ public class BedwarsGameListener implements Listener {
         for (Map.Entry<UUID, String> entry : playerDataMap.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null || !player.isOnline()) continue;
+            // 跨局玩家连 votedMessage 也不能收，须在投票分支前拦截
+            if (BedwarsRel.getInstance().getGameManager().getGameOfPlayer(player) != game) continue;
             if (votedPlayers.get(gameName).contains(player.getUniqueId())) {
                 sendMessage(player, new BaseComponent[]{new TextComponent(ChatColor.translateAlternateColorCodes('&', votedMessage))});
                 continue;
